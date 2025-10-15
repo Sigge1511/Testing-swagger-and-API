@@ -7,21 +7,17 @@ using Swashbuckle.AspNetCore.SwaggerGen;
 
 var builder = WebApplication.CreateBuilder(args);
 
-
 //**********************************************************************
-
 // 1. Hämta Connection String
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
-
 // 2. Registrera DB Context för DI
 builder.Services.AddDbContext<ApiContext>(options =>
     options.UseSqlServer(connectionString));
 
 //**********************************************************************
-// Identity Configuration
-
-// Steg 1: Använd AddIdentityCore<TUser> + AddSignInManager()) osv.
+// Identity Setup
+// Använd AddIdentityCore<TUser> + AddSignInManager()) osv.
 builder.Services.AddIdentityCore<ApiUser>(options =>
 {
     options.SignIn.RequireConfirmedAccount = false;
@@ -34,17 +30,41 @@ builder.Services.AddIdentityCore<ApiUser>(options =>
     // Lägg till andra krav här, t.ex. Lockout-inställningar
     // options.Lockout.MaxFailedAccessAttempts = 5;
 })
-    // Lägg till stöd för roller
+    // Roller
     .AddRoles<IdentityRole>()
-    // Talar om att Identity ska använda Entity Framework Core och ApiContext
+    // Identity ska använda Entity Framework Core och ApiContext
     .AddEntityFrameworkStores<ApiContext>()
-    // Lägger till stöd för tokens (t.ex. för lösenordsåterställning, e-postbekräftelse)
+    // Stöd för t.ex. lösenordsåterställning, e-postbekräftelse)
     .AddDefaultTokenProviders()
-    // Lägger till SignInManager<TUser> som behövs för PasswordSignInAsync
+    // SignInManager<TUser> behövs för PasswordSignInAsync
     .AddSignInManager();
 
 //***********************************************************************
-
+//Konfiguration av cookies som håller koll på inloggning
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    //För API
+    options.Events.OnRedirectToLogin = context =>
+    {
+        context.Response.StatusCode = 401;
+        return Task.CompletedTask;
+    };
+    options.Events.OnRedirectToAccessDenied = context =>
+    {
+        context.Response.StatusCode = 403;
+        return Task.CompletedTask;
+    };
+    //Dev
+    options.Cookie.SameSite = SameSiteMode.None;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+});
+//Kollar hur det går med inlogg 
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = IdentityConstants.ApplicationScheme;
+    options.DefaultChallengeScheme = IdentityConstants.ApplicationScheme;
+})
+.AddIdentityCookies();
 
 builder.Services.AddOpenApi();
 
@@ -54,7 +74,6 @@ builder.Services.AddSwaggerGen(c=>
 { 
     c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo { Title = "apiv4", Version = "v1" }); 
 });
-
 
 // Add services to the container.
 builder.Services.AddControllers();
@@ -70,33 +89,6 @@ builder.Services.AddCors(options =>
                    .AllowAnyHeader()
                    .AllowCredentials();
         });
-});
-
-//Kollar hur det går med inlogg 
-builder.Services.AddAuthentication(options=>
-{
-    options.DefaultAuthenticateScheme=IdentityConstants.ApplicationScheme;
-    options.DefaultChallengeScheme=IdentityConstants.ApplicationScheme;
-})
-.AddIdentityCookies();
-
-//Konfiguration av cookies som håller koll på inloggning
-builder.Services.ConfigureApplicationCookie(options=>
-{
-    //För API
-    options.Events.OnRedirectToLogin=context=>
-    {
-        context.Response.StatusCode=401;
-        return Task.CompletedTask;       
-    };
-    options.Events.OnRedirectToAccessDenied=context=>
-    {
-        context.Response.StatusCode=403;
-        return Task.CompletedTask;       
-    };
-    //Dev
-    options.Cookie.SameSite= SameSiteMode.None;
-    options.Cookie.SecurePolicy= CookieSecurePolicy.Always;
 });
 
 var app = builder.Build();
