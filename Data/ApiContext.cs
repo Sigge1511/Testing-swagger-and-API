@@ -6,11 +6,10 @@ namespace apiv4.Data
 {
     public class ApiContext :IdentityDbContext<ApiUser>
     {
-        public string ConnectionString = "Data Source=(localdb)\\MSSQLLocalDB;Initial Catalog=apitester;Integrated Security=True;Connect Timeout=30;Encrypt=False;Trust Server Certificate=False;Application Intent=ReadWrite;Multi Subnet Failover=False";
+        //public string connectionString = "Data Source=(localdb)\\MSSQLLocalDB;Initial Catalog=apitester;Integrated Security=True;Connect Timeout=30;Encrypt=False;Trust Server Certificate=False;Application Intent=ReadWrite;Multi Subnet Failover=False";
 
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        public ApiContext(DbContextOptions<ApiContext> options):base(options)
         {
-            optionsBuilder.UseSqlServer(ConnectionString);
         }
         public DbSet<Book> BookSet { get; set; } = default!;
         public DbSet<ApiUser> ApiUserSet { get; set; } = default!;

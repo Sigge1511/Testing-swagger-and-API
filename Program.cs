@@ -1,3 +1,4 @@
+using apiv4.Data;
 using apiv4.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -6,11 +7,45 @@ using Swashbuckle.AspNetCore.SwaggerGen;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-builder.Services.AddControllers();
+
+//**********************************************************************
+
+// 1. Hämta Connection String
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+
+// 2. Registrera DB Context för DI
+builder.Services.AddDbContext<ApiContext>(options =>
+    options.UseSqlServer(connectionString));
+
+//**********************************************************************
+// Identity Configuration
+
+// Steg 1: Använd AddIdentityCore<TUser> + AddSignInManager()) osv.
+builder.Services.AddIdentityCore<ApiUser>(options =>
+{
+    options.SignIn.RequireConfirmedAccount = false;
+
+    // (valfritt) lösenkrav i dev - håll dessa borta från din production-appsettings!
+    options.Password.RequireNonAlphanumeric = false;
+    options.Password.RequireUppercase = false;
+    options.Password.RequiredLength = 6;
+
+    // Lägg till andra krav här, t.ex. Lockout-inställningar
+    // options.Lockout.MaxFailedAccessAttempts = 5;
+})
+    // Lägg till stöd för roller
+    .AddRoles<IdentityRole>()
+    // Talar om att Identity ska använda Entity Framework Core och ApiContext
+    .AddEntityFrameworkStores<ApiContext>()
+    // Lägger till stöd för tokens (t.ex. för lösenordsåterställning, e-postbekräftelse)
+    .AddDefaultTokenProviders()
+    // Lägger till SignInManager<TUser> som behövs för PasswordSignInAsync
+    .AddSignInManager();
+
+//***********************************************************************
 
 
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
 builder.Services.AddEndpointsApiExplorer();
@@ -19,6 +54,10 @@ builder.Services.AddSwaggerGen(c=>
 { 
     c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo { Title = "apiv4", Version = "v1" }); 
 });
+
+
+// Add services to the container.
+builder.Services.AddControllers();
 
 //Cors skyddar vad vi delar mellan olika domäner
 builder.Services.AddCors(options =>
@@ -33,6 +72,7 @@ builder.Services.AddCors(options =>
         });
 });
 
+//Kollar hur det går med inlogg 
 builder.Services.AddAuthentication(options=>
 {
     options.DefaultAuthenticateScheme=IdentityConstants.ApplicationScheme;
@@ -40,44 +80,42 @@ builder.Services.AddAuthentication(options=>
 })
 .AddIdentityCookies();
 
+//Konfiguration av cookies som håller koll på inloggning
 builder.Services.ConfigureApplicationCookie(options=>
 {
     //För API
     options.Events.OnRedirectToLogin=context=>
     {
         context.Response.StatusCode=401;
-        return System.Threading.Tasks.Task.CompletedTask;       
+        return Task.CompletedTask;       
     };
     options.Events.OnRedirectToAccessDenied=context=>
     {
         context.Response.StatusCode=403;
-        return System.Threading.Tasks.Task.CompletedTask;       
+        return Task.CompletedTask;       
     };
     //Dev
     options.Cookie.SameSite= SameSiteMode.None;
     options.Cookie.SecurePolicy= CookieSecurePolicy.Always;
 });
 
-
-
-
-
-
-builder.Services.AddIdentityCore<ApiUser>()
-    .AddEntityFrameworkStores<apiv4.Data.ApiContext>();
-
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
+    app.UseSwagger(); // Måste köras FÖRE UseSwaggerUI
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "apiv4 v1");
+    });
+
 }
+;
 
 app.UseHttpsRedirection();
-
+app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapControllers();
 
 app.Run();
