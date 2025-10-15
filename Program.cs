@@ -1,5 +1,7 @@
 using apiv4.Data;
 using apiv4.Models;
+using apiv4.Repositories;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Swashbuckle.AspNetCore;
@@ -7,7 +9,7 @@ using Swashbuckle.AspNetCore.SwaggerGen;
 
 var builder = WebApplication.CreateBuilder(args);
 
-//**********************************************************************
+//***************** DATABASFIX *****************************************************
 // 1. Hämta Connection String
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
@@ -15,7 +17,7 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContext<ApiContext>(options =>
     options.UseSqlServer(connectionString));
 
-//**********************************************************************
+//**************** IDENTITY + EF CORE ******************************************************
 // Identity Setup
 // Använd AddIdentityCore<TUser> + AddSignInManager()) osv.
 builder.Services.AddIdentityCore<ApiUser>(options =>
@@ -30,13 +32,11 @@ builder.Services.AddIdentityCore<ApiUser>(options =>
     // Lägg till andra krav här, t.ex. Lockout-inställningar
     // options.Lockout.MaxFailedAccessAttempts = 5;
 })
-    // Roller
     .AddRoles<IdentityRole>()
     // Identity ska använda Entity Framework Core och ApiContext
     .AddEntityFrameworkStores<ApiContext>()
-    // Stöd för t.ex. lösenordsåterställning, e-postbekräftelse)
+    // Stöd för t.ex. lösenordsåterställning
     .AddDefaultTokenProviders()
-    // SignInManager<TUser> behövs för PasswordSignInAsync
     .AddSignInManager();
 
 //***********************************************************************
@@ -66,18 +66,20 @@ builder.Services.AddAuthentication(options =>
 })
 .AddIdentityCookies();
 
+// Add services to the container.
+builder.Services.AddControllers();
+
+// Lägg till denna rad för att repo ska fungera
+builder.Services.AddScoped<IBookRepo,BookRepo>();
+
+
+//************* SWAGGER OCH CORS *****************************
 builder.Services.AddOpenApi();
-
 builder.Services.AddEndpointsApiExplorer();
-
 builder.Services.AddSwaggerGen(c=>
 { 
     c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo { Title = "apiv4", Version = "v1" }); 
 });
-
-// Add services to the container.
-builder.Services.AddControllers();
-
 //Cors skyddar vad vi delar mellan olika domäner
 builder.Services.AddCors(options =>
 {
@@ -91,23 +93,60 @@ builder.Services.AddCors(options =>
         });
 });
 
-var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+//********** BYGG OCH STARTA APPEN ***************************
+var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
+    // För att undvika att krascha appen pågrund av ett problem med seeding.
+    try
+    {
+        // app.Services ger oss tillgång till IServiceProvider
+        await apiv4.SeedData.DataSeeder.SeedAsync(app.Services);
+
+        //// Här kan du lägga till en logger om du vill se att det fungerade
+        //var logger = app.Services.GetRequiredService<ILogger<Program>>();
+        //logger.LogInformation("Database seeding completed successfully.");
+    }
+    catch (Exception ex)
+    {
+        // Logga eventuella fel under seeding
+        var logger = app.Services.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "Ett fel inträffade under seeding av databasen.");
+    }
+
     app.UseSwagger(); // Måste köras FÖRE UseSwaggerUI
     app.UseSwaggerUI(c =>
     {
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "apiv4 v1");
     });
 
-}
-;
+};
 
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
+app.Use(async (context, next) =>
+{
+    // Fortsätt till nästa middleware (MapControllers)
+    await next();
+
+    // Kontrollera om statuskoden fortfarande är 404 (vilket indikerar att resursen inte kunde hittas ELLER att åtkomst nekades)
+    if (context.Response.StatusCode == StatusCodes.Status404NotFound)
+    {
+        // 1. Om användaren INTE är autentiserad men försökte komma åt en [Authorize] resurs:
+        if (!context.User.Identity.IsAuthenticated)
+        {
+            // Tvinga systemet att försöka svara med en 401-utmaning för ditt schema
+            // Detta ska få Identity-eventen att köra och skicka 401 istället för 302/404
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return;
+        }
+        // 2. Om användaren ÄR autentiserad men saknar behörighet/roll (då ska den vara 403, men fås som 404)
+        // Vi kan här istället välja att inte ändra något om den är autentiserad, 
+        // då en 404 då betyder att resursen faktiskt inte finns.
+    }
+});
 app.MapControllers();
 
 app.Run();

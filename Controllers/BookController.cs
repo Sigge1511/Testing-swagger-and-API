@@ -21,16 +21,32 @@ namespace apiv4.Controllers
         }
         //***************************************************************
 
+        // Hämta en specifik bok (Korrigerad returtyp och async)
+        [Authorize(Roles = ApiRole.User, AuthenticationSchemes = "Identity.Application")]
         [HttpGet("{id}")]
-        public BookController? Get(int id) 
-        { return _bookrepo.Get(id); }
-
-        [Authorize(Roles = ApiRole.User)]
-        [HttpGet]
-        public List<Book> GetAllBooks()
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)] 
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]    
+        [ProducesResponseType(StatusCodes.Status404NotFound)]     
+        public async Task<ActionResult<Book>> Get(short id)
         {
-            return _bookrepo.GetBooks();
+            var book = await _bookrepo.Get(id);
+            if (book == null)
+            {
+                return NotFound();
+            }
+            return Ok(book);
+        }
+
+        // Hämta alla böcker (Korrigerad till async)
+        [Authorize(Roles = ApiRole.User)]
+        // Lägg till bok (Korrigerad till async Task)
+        [HttpPost]
+        public async Task<IActionResult> Add([FromBody] Book book)
+        {
+            await _bookrepo.Add(book);
+            return CreatedAtAction(nameof(Get), new { id = book.Id }, book);
         }
     }
-    
+
 }
