@@ -15,7 +15,6 @@ namespace apiv4.Controllers
     [ApiController]
     public class AuthController : ControllerBase
     {
-        private readonly SignInManager<ApiUser> _signInManager;
         private readonly UserManager<ApiUser> _userManager;
         private readonly IConfiguration _config;
 
