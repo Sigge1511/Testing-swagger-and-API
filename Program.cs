@@ -2,8 +2,10 @@ using apiv4.Data;
 using apiv4.Models;
 using apiv4.Repositories;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Swashbuckle.AspNetCore;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
@@ -39,32 +41,87 @@ builder.Services.AddIdentityCore<ApiUser>(options =>
     .AddDefaultTokenProviders()
     .AddSignInManager();
 
-//***********************************************************************
-//Konfiguration av cookies som håller koll på inloggning
-builder.Services.ConfigureApplicationCookie(options =>
+
+//Cors skyddar vad vi delar mellan olika domäner
+builder.Services.AddCors(options =>
 {
-    //För API
-    options.Events.OnRedirectToLogin = context =>
-    {
-        context.Response.StatusCode = 401;
-        return Task.CompletedTask;
-    };
-    options.Events.OnRedirectToAccessDenied = context =>
-    {
-        context.Response.StatusCode = 403;
-        return Task.CompletedTask;
-    };
-    //Dev
-    options.Cookie.SameSite = SameSiteMode.None;
-    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+    options.AddPolicy("AllowAll",
+        builder =>
+        {
+            builder.AllowAnyOrigin()
+                   .AllowAnyMethod()
+                   .AllowAnyHeader()
+                   .AllowCredentials();
+        });
 });
-//Kollar hur det går med inlogg 
+
+//**************** AUTHENTICATION ******************************************************
+
 builder.Services.AddAuthentication(options =>
 {
-    options.DefaultAuthenticateScheme = IdentityConstants.ApplicationScheme;
-    options.DefaultChallengeScheme = IdentityConstants.ApplicationScheme;
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
 })
-.AddIdentityCookies();
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new Microsoft.IdentityModel.Tokens.TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = builder.Configuration["JwtSettings:Issuer"],
+        ValidAudience = builder.Configuration["JwtSettings:Audience"],
+        IssuerSigningKey = new SymmetricSecurityKey(
+            System.Text.Encoding.UTF8.GetBytes(builder.Configuration["JwtSettings:Key"]!))
+    };
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//KOMMENTERAR UT ALLT OM IDENTITY OCH COOKIES 
+////***********************************************************************
+////Konfiguration av cookies som håller koll på inloggning
+//builder.Services.ConfigureApplicationCookie(options =>
+//{
+//    //För API
+//    options.Events.OnRedirectToLogin = context =>
+//    {
+//        context.Response.StatusCode = 401;
+//        return Task.CompletedTask;
+//    };
+//    options.Events.OnRedirectToAccessDenied = context =>
+//    {
+//        context.Response.StatusCode = 403;
+//        return Task.CompletedTask;
+//    };
+//    //Dev
+//    options.Cookie.SameSite = SameSiteMode.None;
+//    options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+//});
+////Kollar hur det går med inlogg 
+//builder.Services.AddAuthentication(options =>
+//{
+//    options.DefaultAuthenticateScheme = IdentityConstants.ApplicationScheme;
+//    options.DefaultChallengeScheme = IdentityConstants.ApplicationScheme;
+//})
+//.AddIdentityCookies();
+
+
+
+
+
 
 // Add services to the container.
 builder.Services.AddControllers();
@@ -80,18 +137,7 @@ builder.Services.AddSwaggerGen(c=>
 { 
     c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo { Title = "apiv4", Version = "v1" }); 
 });
-//Cors skyddar vad vi delar mellan olika domäner
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowAll",
-        builder =>
-        {
-            builder.AllowAnyOrigin()
-                   .AllowAnyMethod()
-                   .AllowAnyHeader()
-                   .AllowCredentials();
-        });
-});
+
 
 
 //********** BYGG OCH STARTA APPEN ***************************

@@ -1,8 +1,13 @@
-﻿using apiv4.Dto;
+﻿using apiv4.Constants;
+using apiv4.Dto;
 using apiv4.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.DotNet.Scaffolding.Shared.Messaging;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 
 namespace apiv4.Controllers
 {
@@ -12,10 +17,13 @@ namespace apiv4.Controllers
     {
         private readonly SignInManager<ApiUser> _signInManager;
         private readonly UserManager<ApiUser> _userManager;
-        public AuthController(SignInManager<ApiUser> signInManager, UserManager<ApiUser> userManager)
+        private readonly IConfiguration _config;
+
+        public AuthController(SignInManager<ApiUser> signInManager, UserManager<ApiUser> userManager, IConfiguration configuration)
         {
             _signInManager = signInManager;
             _userManager = userManager;
+            _config = configuration;
         }
         
         //***************************************************************
@@ -52,12 +60,13 @@ namespace apiv4.Controllers
                 return Problem($"Something went wrong in the {nameof(Register)}", statusCode: 500);
 
             }
+            //ska inte skapa token - user ska bara sparas i db här. Logga in i eget steg sen
         }
 
         //***************************************************************
         [HttpPost]
         [Route("login")]
-        public async Task<IActionResult> Login(LoginUserDto userDto)
+        public async Task<ActionResult<AuthResponseDto>> Login(LoginUserDto userDto)
         {
             try
             {
@@ -69,17 +78,55 @@ namespace apiv4.Controllers
                     return NotFound(); // Skickas              
                 }
 
-                // Add what ever is needed to create a JWT. ?
-                var result = await _signInManager.PasswordSignInAsync(user, userDto.Password, isPersistent: true, lockoutOnFailure: false);
+                //Skapa Token
+                string tokenString = await GenerateToken(user);
+                var response = new AuthResponseDto
+                {
+                    UserId = user.Id,
+                    Token = tokenString,
+                    Email = userDto.Email
+                };
+                //var result = await _signInManager.PasswordSignInAsync(user, userDto.Password, isPersistent: true, lockoutOnFailure: false);
 
-                if (!result.Succeeded) return Unauthorized();
-                return Ok(new { message = "Logged in with cookie" });
+                //if (!result.Succeeded) return Unauthorized();
 
+                return Ok(response);
             }
             catch (Exception)
             {
                 return Problem($"Something went wrong in the {nameof(Login)}", statusCode: 500);
             }
+        }
+
+        private async Task<string> GenerateToken(ApiUser user)
+        {
+            var securityKey = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(_config["JwtSettings:Key"]));
+            var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
+            var roles = await _userManager.GetRolesAsync(user);
+
+
+            var roleClaims = roles.Select(q => new Claim(ClaimTypes.Role, q)).ToList();
+            var userClaims = await _userManager.GetClaimsAsync(user);
+
+            var claims = new List<Claim>
+            {
+                new Claim(JwtRegisteredClaimNames.Sub, user.UserName),
+                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+                new Claim(CustomClaimTypes.Uid, user.Id),
+                new Claim(JwtRegisteredClaimNames.Email, user.Email)
+
+            }.Union(roleClaims)
+             .Union(userClaims);
+
+            var token = new JwtSecurityToken(
+                issuer: _config["JwtSettings:Issuer"],
+                audience: _config["JwtSettings:Audience"],
+                claims: claims,
+                expires: DateTime.UtcNow.AddMinutes(Convert.ToInt32(_config["JwtSettings:DurationInMinutes"])),
+                signingCredentials: credentials
+                );
+
+            return new JwtSecurityTokenHandler().WriteToken(token);
         }
 
         //***************************************************************
