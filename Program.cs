@@ -3,6 +3,7 @@ using apiv4.Models;
 using apiv4.Repositories;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.OpenApi.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -80,16 +81,6 @@ builder.Services.AddAuthentication(options =>
 
 
 
-
-
-
-
-
-
-
-
-
-
 //KOMMENTERAR UT ALLT OM IDENTITY OCH COOKIES 
 ////***********************************************************************
 ////Konfiguration av cookies som håller koll på inloggning
@@ -131,14 +122,45 @@ builder.Services.AddScoped<IBookRepo,BookRepo>();
 
 
 //************* SWAGGER OCH CORS *****************************
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi(); // Kan vara redundant beroende på konfiguration, men vi behåller den
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c=>
-{ 
-    c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo { Title = "apiv4", Version = "v1" }); 
+
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo { Title = "apiv4", Version = "v1" });
+
+    // ----------------------------------------------------
+    // NY KOD FÖR ATT AKTIVERA JWT BEARER I SWAGGER UI
+    // ----------------------------------------------------
+
+    // 1. Definiera säkerhetsschemat (Berätta för Swagger om "Bearer")
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "Bearer", // Måste matcha schemat i AddAuthentication("Bearer")
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "JWT Authorization header using the Bearer scheme. Enter your token in the text input below."
+    });
+
+    // 2. Applicera säkerhetskravet (Sätt hänglåset på alla metoder)
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            new string[] {}
+        }
+    });
+    // ----------------------------------------------------
 });
-
-
 
 //********** BYGG OCH STARTA APPEN ***************************
 var app = builder.Build();

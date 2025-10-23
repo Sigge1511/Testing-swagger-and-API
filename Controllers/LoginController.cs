@@ -128,12 +128,12 @@ namespace apiv4.Controllers
         }
 
         //***************************************************************
-        [HttpPost("logout")]
-        public async Task<IActionResult> Logout()
-        {
-            await _signInManager.SignOutAsync(); // tar bort cookie
-            return Ok(new { message = "Logged out" });
-        }
+        //[HttpPost("logout")]
+        //public async Task<IActionResult> Logout()
+        //{
+        //    await _signInManager.SignOutAsync(); // tar bort cookie
+        //    return Ok(new { message = "Logged out" });
+        //}
 
     }
 }

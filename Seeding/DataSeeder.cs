@@ -23,6 +23,7 @@ namespace apiv4.SeedData
             // Använder konstanten för User-rollen
             string userRole = ApiRole.User;
             string adminRole = ApiRole.Admin;
+            string superUserRole = ApiRole.SuperUser;
             if (!await roleManager.RoleExistsAsync(adminRole))
             {
                 await roleManager.CreateAsync(new IdentityRole(adminRole));
@@ -30,6 +31,10 @@ namespace apiv4.SeedData
             if (!await roleManager.RoleExistsAsync(userRole))
             {
                 await roleManager.CreateAsync(new IdentityRole(userRole));
+            }
+            if (!await roleManager.RoleExistsAsync(superUserRole))
+            {
+                await roleManager.CreateAsync(new IdentityRole(superUserRole));
             }
 
             // ====================================================================
@@ -56,6 +61,31 @@ namespace apiv4.SeedData
                     await userManager.AddToRoleAsync(defaultUser, ApiRole.User);
                 }
             }
+
+            //********************************************
+            // 2. Användar-Seeding
+            string defaultUserName2 = "Märta";
+            string defaultPassword2 = "MjukaÖron.19";
+            var user2 = await userManager.FindByNameAsync(defaultUserName);
+            // KONTROLL: Se till att användaren INTE redan finns
+            if (user2 == null)
+            {
+                // ... (resten av användarobjektet)
+                var defaultUser2 = new ApiUser
+                {
+                    UserName = "marta@test.com",
+                    Email = "marta@test.com",
+                    FirstName = "Märta",
+                    LastName = "Söt",
+                    EmailConfirmed = true
+                };
+                var result2 = await userManager.CreateAsync(defaultUser2, defaultPassword2);
+                if (result2.Succeeded)
+                {
+                    await userManager.AddToRoleAsync(defaultUser2, ApiRole.SuperUser);
+                }
+            }
+
 
             // ====================================================================
             // 3. Bok-Seeding 

@@ -4,6 +4,7 @@ using apiv4.Repositories;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using System.Data;
 
 namespace apiv4.Controllers
 {
@@ -39,14 +40,22 @@ namespace apiv4.Controllers
         }
 
         // Hämta alla böcker (Korrigerad till async)
-        [Authorize(Roles = ApiRole.User)]
-        // Lägg till bok (Korrigerad till async Task)
+        [Authorize(Roles = ApiRole.User + "," + ApiRole.SuperUser, AuthenticationSchemes = "Bearer")]
         [HttpPost]
         public async Task<IActionResult> Add([FromBody] Book book)
         {
             await _bookrepo.Add(book);
             return CreatedAtAction(nameof(Get), new { id = book.Id }, book);
         }
+
+        //************* SKAPA BOK
+        //[Authorize(Roles = ApiRole.SuperUser)] 
+        //[HttpPost]
+        //public async Task<IActionResult> CreateBook([FromBody] Book book)
+        //{
+        //    await _bookrepo.Add(book);
+        //    return CreatedAtAction(nameof(Get), new { id = book.Id }, book);
+        //}
     }
 
 }
